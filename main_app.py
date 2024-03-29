@@ -131,7 +131,7 @@ class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
         self.setWindowTitle("Op|qO - Objective facial Palsy QuantificatiOn")
-        self.setWindowIcon(QIcon(self.icon_img_path))
+        #self.setWindowIcon(QIcon(self.icon_img_path))
 
         self.setMouseTracking(True)
 
@@ -464,24 +464,20 @@ class MainWindow(QMainWindow):
 
 
         settingsMenu = QMenu(self)
-
         settingsLabel = QLabel('Settings', self, objectName="menuBar_button")
         settingsLabel.mousePressEvent = lambda _: self.show_menu(settingsMenu, settingsLabel)
-     
-        settingsMenu.addAction(" Show reference lines", self.settings_actions).setCheckable(True)
-        settingsMenu.actions()[-1].setChecked(True)
-        settingsMenu.actions()[-1].setEnabled(False)
-        settingsMenu.addAction(" Show Landmarks", self.settings_actions).setCheckable(True)
+
+        self.settings_landmarks = QAction(" Show Facial Landmarks", settingsMenu, triggered=self.settings_actions, checkable=True)
+        self.settings_axis      = QAction(" Show Reference Lines", settingsMenu, triggered=self.settings_actions, checkable=True, checked=True, enabled=False)
+        self.settings_fps       = QAction(" Show FPS", settingsMenu, triggered=self.settings_actions, checkable=True)
+        self.settings_contour   = QAction(" Show Facial Contour", settingsMenu, triggered=self.settings_actions, checkable=True, checked=True)
+        self.settings_plot      = QAction("      Show Plot Window", settingsMenu, triggered=self.settings_actions)
+        self.settings_blur      = QAction(" Blur background", settingsMenu, triggered=self.settings_actions, checkable=True)
+        
+        settingsMenu.addActions([self.settings_landmarks, self.settings_axis, self.settings_fps, self.settings_contour, self.settings_plot])
         settingsMenu.addSeparator()
-        settingsMenu.addAction(" Show FPS", self.settings_actions).setCheckable(True)
-        settingsMenu.addAction(" Show Default Axis", self.settings_actions).setCheckable(True)
-        settingsMenu.actions()[-1].setChecked(True)
-        settingsMenu.addAction(" Show Face Contour", self.settings_actions).setCheckable(True)
-        settingsMenu.actions()[-1].setChecked(True)
-        settingsMenu.addAction(" Show Background Blurred", self.settings_actions).setCheckable(True)
-        settingsMenu.actions()[-1].setChecked(False)
+        settingsMenu.addAction(self.settings_blur)
         settingsMenu.addSeparator()
-        settingsMenu.addAction("      Open Plot Window", self.settings_actions)
 
 
         self.savedConfigMenu = settingsMenu.addMenu("      Default Outcome Measures")
@@ -494,25 +490,12 @@ class MainWindow(QMainWindow):
         self.savedConfigMenu.addSeparator()
         self.load_config("saved")
 
-
         menu_layout.addWidget(settingsLabel)
-
-
-        # self.playLabel = QLabel('Play', self, objectName="menuBar_button")
-        # self.playLabel.mousePressEvent = lambda _: self.start_video(self.playLabel)
-        # self.playLabel.mouseReleaseEvent = lambda _: self.menuLabel_release(self.playLabel)
-        # menu_layout.addWidget(self.playLabel)
 
         self.pauseLabel = QLabel('Pause', self, objectName="menuBar_button")
         self.pauseLabel.mousePressEvent = lambda _: self.toggle_pause(self.pauseLabel)
         self.pauseLabel.mouseReleaseEvent = lambda _: self.menuLabel_release(self.pauseLabel)
         menu_layout.addWidget(self.pauseLabel)
-
-        # stopLabel = QLabel('Stop', self, objectName="menuBar_button")
-        # stopLabel.mousePressEvent = lambda _: self.start_video(stopLabel)
-        # stopLabel.mouseReleaseEvent = lambda _: self.menuLabel_release(stopLabel)
-        # menu_layout.addWidget(stopLabel)
-
 
         self.recordLabel = QLabel('Record', self, objectName="menuBar_button")
         self.recordLabel.mousePressEvent = lambda _: self.toggle_record(self.recordLabel)
@@ -572,8 +555,8 @@ class MainWindow(QMainWindow):
         button = self.sender()
         parent = self.sender().parent()
 
-        if button.text() in [" Show reference lines", " Show Landmarks"]:
-            opposite = set([" Show reference lines", " Show Landmarks"]) - set([button.text()])
+        if button.text() in [self.settings_landmarks.text(), self.settings_axis.text()]:
+            opposite = set([self.settings_landmarks.text(), self.settings_axis.text()]) - set([button.text()])
 
             button.setEnabled(False)
             for i, action in enumerate(parent.actions()):
@@ -581,21 +564,18 @@ class MainWindow(QMainWindow):
                     parent.actions()[i].setEnabled(True)
                     parent.actions()[i].setChecked(False)
 
-            self.movie_thread.mode = "Play" if button.text() == " Show reference lines" else "Landmarks"
+            self.movie_thread.mode = "Play" if button.text() == self.settings_axis.text() else "Landmarks"
 
-        elif button.text() == " Show FPS":
+        elif button.text() == self.settings_fps.text():
             self.show_fps = not self.show_fps
 
-        elif button.text() == " Show Default Axis":
-            self.movie_thread.show_axis = not self.movie_thread.show_axis
-
-        elif button.text() == " Show Face Contour":
+        elif button.text() == self.settings_contour.text():
             self.movie_thread.show_contour = not self.movie_thread.show_contour
 
-        elif button.text() == " Show Background Blurred":
+        elif button.text() == self.settings_blur.text():
             self.movie_thread.blur_background = not self.movie_thread.blur_background
         
-        elif button.text() == "      Open Plot Window":
+        elif button.text() == self.settings_plot.text():
             if not self.plot_window.isVisible():
                 self.plot_window.show()
 
