@@ -13,7 +13,16 @@ def resource_path(relative_path):
 class face_detector:
 
     landmarker_model_path = resource_path("./models/face_landmarker.task")
-    segmenter_model_path = resource_path("./models/selfie_segmenter_landscape.tflite")
+
+    SORTED_FACE_OVAL = [(10, 338), (338, 297), (297, 332), (332, 284),
+                        (284, 251), (251, 389), (389, 356), (356, 454),
+                        (454, 323), (323, 361), (361, 288), (288, 397),
+                        (397, 365), (365, 379), (379, 378), (378, 400),
+                        (400, 377), (377, 152), (152, 148), (148, 176),
+                        (176, 149), (149, 150), (150, 136), (136, 172),
+                        (172, 58), (58, 132), (132, 93), (93, 234),
+                        (234, 127), (127, 162), (162, 21), (21, 54),
+                        (54, 103), (103, 67), (67, 109), (109, 10)]
 
     def __init__(self):
         self.detection_result = None
@@ -29,9 +38,9 @@ class face_detector:
         self.recorded_data = list()
         self.measures = []
         self.cmap = get_cmap("tab10")
+        self.mask = None
 
         self.init_face_detector()
-        self.init_back_detector()   
 
     def init_face_detector(self):
         BaseOptions             = mp.tasks.BaseOptions
@@ -47,21 +56,6 @@ class face_detector:
         
         self.landmarker = FaceLandmarker.create_from_options(face_options)
 
-    def init_back_detector(self):
-        BaseOptions             = mp.tasks.BaseOptions
-        ImageSegmenter          = mp.tasks.vision.ImageSegmenter
-        ImageSegmenterOptions   = mp.tasks.vision.ImageSegmenterOptions
-        VisionRunningMode       = mp.tasks.vision.RunningMode
-
-        segmenter_options = ImageSegmenterOptions(
-                    base_options            = BaseOptions(model_asset_path=self.segmenter_model_path),
-                    running_mode            = VisionRunningMode.LIVE_STREAM,
-                    output_category_mask    = True,
-                    result_callback         = self.segmenter_result_callback)
-
-
-        self.segmenter = ImageSegmenter.create_from_options(segmenter_options)
-
     def process_image(self, image, stmp_ms=None):
         if stmp_ms:
             self.timestamp_ms = stmp_ms 
@@ -72,9 +66,6 @@ class face_detector:
         mp_image = mp.Image(image_format=mp.ImageFormat.SRGB, data=image)
 
         self.landmarker.detect_async(mp_image, self.timestamp_ms)
-        
-        if self.blur_background:
-            self.segmenter.segment_async(mp_image, self.timestamp_ms)
 
     def landmarker_result_callback(self, result, output_image: mp.Image, timestamp_ms: int):
         self.detection_result = result
@@ -209,6 +200,8 @@ class face_detector:
 
         face_landmarks_list = self.detection_result.face_landmarks
 
+        self.mask = np.zeros(self.image.shape[:2], dtype=np.uint8)
+
         # Loop through the detected faces to visualize. (only one face)
         for face_landmarks in (face_landmarks_list):
 
@@ -216,7 +209,7 @@ class face_detector:
             landmarks = landmark_pb2.NormalizedLandmarkList()
             landmarks.landmark.extend([
             landmark_pb2.NormalizedLandmark(x=landmark.x, y=landmark.y, z=landmark.z) for landmark in face_landmarks])
-            
+
             # Drawing facemesh contours.
             mp.solutions.drawing_utils.draw_landmarks(
                 image=self.image,
@@ -225,6 +218,12 @@ class face_detector:
                 landmark_drawing_spec=None,
                 connection_drawing_spec=mp.solutions.drawing_styles
                 .get_default_face_mesh_contours_style())
+
+            # Obtener índices únicos de los landmarks del contorno facial
+            contour_points = np.array([[face_landmarks[start].x * self.image.shape[1], face_landmarks[start].y * self.image.shape[0]] 
+                                        for start, _ in self.SORTED_FACE_OVAL], dtype=np.int32).reshape((-1, 1, 2))
+
+            cv2.drawContours(self.mask, [contour_points], -1, (255), thickness=cv2.FILLED)
 
 
             for key in self.drawing_data:
@@ -318,6 +317,8 @@ class face_detector:
 
         face_landmarks_list = self.detection_result.face_landmarks
 
+        self.mask = np.zeros(self.image.shape[:2], dtype=np.uint8)
+
         # Loop through the detected faces to visualize. (only one face)
         for face_landmarks in (face_landmarks_list):
 
@@ -335,6 +336,12 @@ class face_detector:
                     landmark_drawing_spec=None,
                     connection_drawing_spec=mp.solutions.drawing_styles
                     .get_default_face_mesh_contours_style())
+                
+            # Obtener índices únicos de los landmarks del contorno facial
+            contour_points = np.array([[face_landmarks[start].x * self.image.shape[1], face_landmarks[start].y * self.image.shape[0]] 
+                                        for start, _ in self.SORTED_FACE_OVAL], dtype=np.int32).reshape((-1, 1, 2))
+
+            cv2.drawContours(self.mask, [contour_points], -1, (255), thickness=cv2.FILLED)
 
             if self.show_axis:
                 A, B = self.V_axis_points
@@ -379,11 +386,11 @@ class face_detector:
 
     def draw_blurred_background(self):
 
-        if self.category_mask is not None: 
-            mask = self.category_mask.numpy_view()
+        if self.mask is not None and self.mask.shape == self.image.shape[:2]:
+            img_copy = self.image.copy()
 
-            blur = cv2.boxFilter(self.image,-1,(17,17))
-            self.image[mask>0] = blur[mask>0]
+            self.image = cv2.boxFilter(self.image,-1, (11,11))
+            self.image[self.mask>0] = img_copy[self.mask>0]
 
         return self.image
 
@@ -393,12 +400,16 @@ if __name__ == "__main__":
     cap = cv2.VideoCapture(0, cv2.CAP_DSHOW)
     detector = face_detector()
 
+    detector.blur_background = False
+
     prev_time = time.time()
     
     while cap.isOpened(): 
         
         ret, frame = cap.read()
-        if not ret: break
+        if not ret: 
+            print("[!]: Couldn't open the camera")
+            break
 
         frame = cv2.flip(frame, 1)
 
@@ -423,4 +434,6 @@ if __name__ == "__main__":
         # Write the frames into a video
         if cv2.waitKey(1) & 0xFF == ord('q'):
             break
+
+    cap.release()
 
