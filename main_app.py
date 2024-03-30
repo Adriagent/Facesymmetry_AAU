@@ -1,8 +1,7 @@
-import os
-import json
+import numpy as np
 import pyqtgraph as pg
+import os, json, sys, cv2, time
 import matplotlib.pyplot as plt
-import sys, cv2, numpy as np, time
 
 from matplotlib.colors import rgb2hex
 
@@ -143,6 +142,7 @@ class MainWindow(QMainWindow):
         self.plot_window = PlotWindow()
         self.plot_recorded_data = PlotRecordedData()
         self.options = []
+        self.cameras = {}
 
         # Layoutsl
         vlayout = QVBoxLayout()
@@ -304,18 +304,13 @@ class MainWindow(QMainWindow):
 
         return img
 
-    def start_video(self, button):
-        # button.setStyleSheet('background-color: rgb(40,40,40);')
+    def start_video(self, mode):
 
-        if button.text() == "Play":
+        if mode == "Play":
             if not self.movie_thread.isRunning() and not self.movie_thread.ThreadActive:
                 self.movie_thread.start()
-                # self.playLabel.setObjectName("menuBar_button_enabled")
 
-        elif button.text() == "Stop" and self.movie_thread.isRunning():
-                self.playLabel.setObjectName("menuBar_button")
-                self.playLabel.setStyleSheet(self.style)
-
+        elif mode == "Stop" and self.movie_thread.isRunning():
                 self.movie_thread.stop()
       
     def stopped_video(self):
@@ -452,17 +447,19 @@ class MainWindow(QMainWindow):
 
     def setup_menubar(self, menu_layout):
 
+        # Options for the File menu:            
         fileMenu = QMenu(self)
-
         fileLabel = QLabel('File', self, objectName="menuBar_button")
         fileLabel.mousePressEvent = lambda _: self.show_menu(fileMenu, fileLabel)
-        fileMenu.addAction(" Open Video File...", self.file_actions).setCheckable(True)
-        fileMenu.addAction(" Use Camera", self.file_actions).setCheckable(True)
-        fileMenu.addSeparator()
-        fileMenu.addAction("     Open Recorded File...", self.file_actions)
+
+        self.file_video         = QAction(" Open Video File...", fileMenu, triggered=self.file_actions)
+        self.file_recorded      = QAction(" Open Recorded File...", fileMenu, triggered=self.file_actions)
+        
+        fileMenu.addActions([self.file_video, self.file_recorded])
         menu_layout.addWidget(fileLabel)
 
 
+        # Options for the Settings menu:
         settingsMenu = QMenu(self)
         settingsLabel = QLabel('Settings', self, objectName="menuBar_button")
         settingsLabel.mousePressEvent = lambda _: self.show_menu(settingsMenu, settingsLabel)
@@ -479,27 +476,39 @@ class MainWindow(QMainWindow):
         settingsMenu.addAction(self.settings_blur)
         settingsMenu.addSeparator()
 
-
-        self.savedConfigMenu = settingsMenu.addMenu("      Default Outcome Measures")
-        self.savedConfigMenu.addAction(" Clear Configuration", self.settings_actions)
-        self.savedConfigMenu.addSeparator()
-        self.load_config("default")
-
+        self.defaultConfigMenu = settingsMenu.addMenu("      Default Outcome Measures")
         self.savedConfigMenu = settingsMenu.addMenu("      Saved Outcome Measures")
-        self.savedConfigMenu.addAction(" Clear Configuration", self.settings_actions)
+        
+        self.config_clear = QAction(" Clear Configuration", self, triggered=self.settings_actions)
+        self.defaultConfigMenu.addAction(self.config_clear)
+        self.savedConfigMenu.addAction(self.config_clear)
+        self.defaultConfigMenu.addSeparator()
         self.savedConfigMenu.addSeparator()
+
+        self.load_config("default")
         self.load_config("saved")
 
         menu_layout.addWidget(settingsLabel)
 
+
+        # Options for the Camera menu:
+        cameraMenu = QMenu(self)
+        cameraLabel = QLabel('Use Camera', self, objectName="menuBar_button")
+        cameraLabel.mousePressEvent         = lambda _: self.find_cameras(cameraMenu, cameraLabel)
+        menu_layout.addWidget(cameraLabel)
+
+
+        # Options for Pause button:
         self.pauseLabel = QLabel('Pause', self, objectName="menuBar_button")
-        self.pauseLabel.mousePressEvent = lambda _: self.toggle_pause(self.pauseLabel)
-        self.pauseLabel.mouseReleaseEvent = lambda _: self.menuLabel_release(self.pauseLabel)
+        self.pauseLabel.mousePressEvent     = lambda _: self.toggle_pause(self.pauseLabel)
+        self.pauseLabel.mouseReleaseEvent   = lambda _: self.menuLabel_release(self.pauseLabel)
         menu_layout.addWidget(self.pauseLabel)
 
+
+        # Options for Record button:
         self.recordLabel = QLabel('Record', self, objectName="menuBar_button")
-        self.recordLabel.mousePressEvent = lambda _: self.toggle_record(self.recordLabel)
-        self.recordLabel.mouseReleaseEvent = lambda _: self.menuLabel_release(self.recordLabel)
+        self.recordLabel.mousePressEvent    = lambda _: self.toggle_record(self.recordLabel)
+        self.recordLabel.mouseReleaseEvent  = lambda _: self.menuLabel_release(self.recordLabel)
         menu_layout.addWidget(self.recordLabel)
 
     def show_menu(self, menu, label):
@@ -514,28 +523,21 @@ class MainWindow(QMainWindow):
         menu.exec_(menu_pos)
 
     def file_actions(self):
-
         button = self.sender()
-        parent = self.sender().parent()
 
-        if button.text() == " Open Video File...":
+        if button.text() == self.file_video.text():
             self.movie_thread.stop()
-            parent.actions()[1].setChecked(False) 
 
             file_name, _ = QFileDialog.getOpenFileName(filter="Video files (*.mov *.mp4)")
             if file_name:
                 self.movie_thread.source = file_name
                 self.toggle_pause(self.pauseLabel, True)
-            else:
-                parent.actions()[0].setChecked(False)
 
-        elif button.text() == " Use Camera":
-            self.movie_thread.stop()
-            parent.actions()[0].setChecked(False)
+                time.sleep(0.2) # For giving time to the thread to close.
+                # if not self.movie_thread.isRunning() and not self.movie_thread.ThreadActive:
+                self.start_video("Play")
 
-            self.movie_thread.source = 0
-
-        elif button.text() == "     Open Recorded File..." and not self.plot_recorded_data.isVisible():
+        elif button.text() == self.file_recorded.text() and not self.plot_recorded_data.isVisible():
             file_name, _ = QFileDialog.getOpenFileName(filter="CSV files (*.csv)")
 
             if file_name:
@@ -544,12 +546,6 @@ class MainWindow(QMainWindow):
 
         else:
             exit("[ERROR]: UNKNOWN FILE ACTION!")
-
-
-        if parent.actions()[0].isChecked() or parent.actions()[1].isChecked():
-            time.sleep(0.2) # For giving time to the thread to close.
-            if not self.movie_thread.isRunning() and not self.movie_thread.ThreadActive:
-                self.start_video(QLabel("Play"))
 
     def settings_actions(self):
         button = self.sender()
@@ -579,8 +575,38 @@ class MainWindow(QMainWindow):
             if not self.plot_window.isVisible():
                 self.plot_window.show()
 
-        elif button.text() == " Clear Configuration":
+        elif button.text() == self.config_clear.text():
             self.set_config(["", "", "", ""],[0,0,0,0])
+
+    def find_cameras(self, cameraMenu, cameraLabel):
+        self.cameras = self.movie_thread.video.find_cameras()
+
+        # remove all the previous buttons in the menu.
+        for action in cameraMenu.actions():
+            cameraMenu.removeAction(action)
+
+        # Add cameras to menu.
+        for id, name in self.cameras.items():
+            action = QAction(f' {id}: {name}', cameraMenu, triggered=self.camera_actions)
+            cameraMenu.addAction(action)
+
+        self.show_menu(cameraMenu, cameraLabel)
+
+    def camera_actions(self):
+        button = self.sender()
+        id = 0
+
+        self.movie_thread.stop()
+
+        for key, name in self.cameras.items():
+            if name == button.text():
+                id = key
+                break
+
+        self.movie_thread.source = id
+        
+        time.sleep(0.2) # For giving time to the thread to close.
+        self.start_video("Play")
 
     def toggle_record(self, button):
         button.setStyleSheet('background-color: rgb(40,40,40);')
@@ -659,14 +685,16 @@ class MainWindow(QMainWindow):
             action.setDefaultWidget(widget)
             action.setText(name)
             action.setProperty("default", mode == "default")
-            self.savedConfigMenu.addAction(action)
 
             if mode == "saved":
+                self.savedConfigMenu.addAction(action)
                 btn = QPushButton('-', widget)
                 btn.setFixedSize(15, 15)
                 btn.setObjectName(name)
                 btn.pressed.connect(self.remove_saved_config)
                 layout.addWidget(btn)
+            else:
+                self.defaultConfigMenu.addAction(action)
 
     def set_config(self, landmarks=None, axis=None):
         self.movie_thread.recorded_data = list()

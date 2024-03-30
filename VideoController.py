@@ -1,9 +1,10 @@
 import cv2
+from pygrabber.dshow_graph import FilterGraph
 
 class Video:
 
     def __init__(self, source = 0):
-        self.camera_ids = []
+        self.available_cameras = {}
         self.source = source
         self.cap = None
 
@@ -19,23 +20,16 @@ class Video:
         if not self.cap.isOpened():
             exit(f"[!]: Cannot open camera: {self.source}")
 
-    def find_cameras(self, n_attempts = 5):
-        index = 0
-        self.camera_ids = []
-        
-        cap = cv2.VideoCapture()
-        while n_attempts > 0:
-            cap.open(index, cv2.CAP_DSHOW)
+    def find_cameras(self):
 
-            if cap.isOpened():
-                self.camera_ids.append(index)
-                cap.release()
-            else:
-                n_attempts -= 1
+        devices = FilterGraph().get_input_devices()
 
-            index += 1
+        self.available_cameras = {}
 
-        return self.camera_ids
+        for device_index, device_name in enumerate(devices):
+            self.available_cameras[device_index] = device_name
+
+        return self.available_cameras
 
     def get_frame(self):
         if self.cap is None:
