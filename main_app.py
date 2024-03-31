@@ -262,7 +262,7 @@ class MainWindow(QMainWindow):
             cv2_img = self.print_fps(cv2_img)
 
         if self.movie_thread.record:
-            cv2_img = self.print_record_dot(cv2_img)
+            cv2.circle(cv2_img, (cv2_img.shape[1]-25, 25), int(min(cv2_img.shape[:2])/50), (0, 0, 255), -1)
 
         if self.movie_thread.pause:
             cv2_img = self.print_pause(cv2_img)
@@ -288,18 +288,13 @@ class MainWindow(QMainWindow):
 
         return img
     
-    def print_record_dot(self, img):
-        cv2.circle(img, (img.shape[1]-25, 25), int(min(img.shape[:2])/50), (0, 0, 255), -1)
-            
-        return img
-    
     def print_pause(self, img):
-        A = (int(img.shape[1]/2)-10 , int(img.shape[0]/2) + int(min(img.shape[:2])/40))
-        B = (int(img.shape[1]/2)-5  , int(img.shape[0]/2) - int(min(img.shape[:2])/40))
+        A = (img.shape[1]//2-10 , img.shape[0]//2 + min(img.shape[:2])//40)
+        B = (img.shape[1]//2-5  , img.shape[0]//2 - min(img.shape[:2])//40)
         img = cv2.rectangle(img, A, B, color=(200,200,200), thickness=2) 
 
-        A = (int(img.shape[1]/2)+10 , int(img.shape[0]/2) + int(min(img.shape[:2])/40))
-        B = (int(img.shape[1]/2)+5  , int(img.shape[0]/2) - int(min(img.shape[:2])/40))
+        A = (img.shape[1]//2+10 , img.shape[0]//2 + min(img.shape[:2])//40)
+        B = (img.shape[1]//2+5  , img.shape[0]//2 - min(img.shape[:2])//40)
         img = cv2.rectangle(img, A, B, color=(200,200,200), thickness=2) 
 
         return img
@@ -317,9 +312,7 @@ class MainWindow(QMainWindow):
         self.set_background_img()
 
         self.recordLabel.setObjectName("menuBar_button")
-        # self.playLabel.setObjectName("menuBar_button")
         self.pauseLabel.setObjectName("menuBar_button")
-        # self.playLabel.setStyleSheet(self.style)
         self.recordLabel.setStyleSheet(self.style)
         self.pauseLabel.setStyleSheet(self.style)
 
@@ -640,7 +633,7 @@ class MainWindow(QMainWindow):
             if not self.movie_thread.record and self.movie_thread.recorded_data: # If record is dissabled, save record.
                 file_name, _ = QFileDialog.getSaveFileName(self, "Save CSV File", "readings", "CSV Files (*.csv)")
                 self.movie_thread.save_recording(file_name)
-                
+       
     def toggle_pause(self, button, force=False):
         button.setStyleSheet('background-color: rgb(40,40,40);')
         if self.movie_thread.ThreadActive or force:
