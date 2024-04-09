@@ -70,9 +70,6 @@ class face_detector:
     def landmarker_result_callback(self, result, output_image: mp.Image, timestamp_ms: int):
         self.detection_result = result
     
-    def segmenter_result_callback(self, result, output_image: mp.Image, timestamp_ms: int):
-        self.category_mask = result.category_mask
-
     def normalized_to_pixel(self, p_normalized):
 
         image_height, image_width = self.image.shape[:2]

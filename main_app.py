@@ -9,7 +9,7 @@ from PyQt5.QtGui import *
 from PyQt5.QtCore import *
 from PyQt5.QtWidgets import *
 
-from VideoController import Video
+from video_controller import Video
 from main_detection import face_detector
 
 
@@ -125,7 +125,7 @@ class MainWindow(QMainWindow):
     default_config_path = resource_path("./config/default_config.json")
     saved_config_path = resource_path("./config/saved_config.json")
     background_img_path = resource_path("./media/background2.png")
-    icon_img_path = resource_path("./media/icon2.png")
+    # icon_img_path = resource_path("./media/icon2.png")
     
     def __init__(self):
         super().__init__()
@@ -905,6 +905,9 @@ class PlotWindow(QWidget):
         self.plot_widget.getAxis('left').enableAutoSIPrefix(False)
         self.plot_widget.getAxis('bottom').enableAutoSIPrefix(False)
         
+        self.plot_widget.getAxis('left').setTextPen('w')
+        self.plot_widget.getAxis('bottom').setTextPen('w')
+
         self.layout = QVBoxLayout()
         self.layout.addWidget(self.plot_widget)
         self.setLayout(self.layout)
@@ -951,35 +954,20 @@ class PlotWindow(QWidget):
 
 
 
-class PlotRecordedData(QWidget):
+class PlotRecordedData(PlotWindow):
 
     def __init__(self):
         super().__init__()
 
         self.setWindowTitle("Recorded Data Plot")
-        self.setGeometry(100, 100, 800, 400)
-
-        self.plot_widget = pg.PlotWidget()
-        self.plot_widget.addLegend()
-        self.plot_widget.showGrid(x = True, y = True)
-        self.plot_widget.setTitle("Measurements")
         label_style = {'color': '#EEE', 'font-size': '12pt'}
         self.plot_widget.setLabel('bottom', "Samples", **label_style)
-        self.plot_widget.setLabel('left', "Distance", "pixel/faceHeight", **label_style)
-        self.plot_widget.getAxis('left').enableAutoSIPrefix(False)
-        self.plot_widget.getAxis('bottom').enableAutoSIPrefix(False)
-        
-        self.layout = QVBoxLayout()
-        self.layout.addWidget(self.plot_widget)
-        self.setLayout(self.layout)
-
-        self.cmap = plt.get_cmap("tab10")
         self.data = None
 
     def load_data(self, file_name):
         
         self.plot_widget.clear()
-
+        
         self.data = np.loadtxt(file_name, delimiter=",", dtype=float).transpose()
         if not len(self.data): return
 
@@ -1000,7 +988,7 @@ class PlotRecordedData(QWidget):
             self.plot_widget.plot(step, line, name=name, pen=pg.mkPen(color=color, width=1))
             self.plot_widget.addItem(scatter)
 
-
+        self.plot_widget.getViewBox().autoRange() # Autofocus on the data.
 
         
 if __name__ == "__main__":
