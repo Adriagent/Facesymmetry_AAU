@@ -18,7 +18,10 @@ class Video:
             self.cap = cv2.VideoCapture(self.source)
 
         if not self.cap.isOpened():
-            exit(f"[!]: Cannot open camera: {self.source}")
+            print(f"[!]: Cannot open camera: {self.source}")
+            return False
+
+        return True 
 
     def find_cameras(self):
 
@@ -45,6 +48,9 @@ class Video:
 
         return ret, img
     
+    def set_frame_index(self, frame_index):
+        self.cap.set(cv2.CAP_PROP_POS_FRAMES, frame_index)
+
     def release(self):
         if self.cap:
             self.cap.release()

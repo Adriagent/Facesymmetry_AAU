@@ -139,10 +139,15 @@ class MainWindow(QMainWindow):
         self.show_fps = False
         self.show_recording = False
         self.saved_config = {}
+        self.movie_thread = MovieThread()
         self.plot_window = PlotWindow()
         self.plot_recorded_data = PlotRecordedData()
         self.options = []
         self.cameras = {}
+
+
+        self.plot_recorded_data.mouseClicked.connect(self.movie_thread.jumpt_to_frame)
+
 
         # Layoutsl
         vlayout = QVBoxLayout()
@@ -164,7 +169,6 @@ class MainWindow(QMainWindow):
 
         # Setup main content.
         self.backg_img = QImage(self.background_img_path)
-        self.movie_thread = MovieThread()
         self.movie_thread.ImageUpdate.connect(self.update_movie) # If a signal with a frame is received, update image.
         self.movie_thread.finished.connect(self.stopped_video)
         self.movie_thread.PauseUpdate.connect(lambda: self.toggle_pause(self.pauseLabel, True))
@@ -537,6 +541,18 @@ class MainWindow(QMainWindow):
                 self.plot_recorded_data.load_data(file_name)
                 self.plot_recorded_data.show()
 
+                # Opening recorded video.
+                source = file_name.split(".")[0] + ".mp4"
+
+                self.movie_thread.source = source
+                self.toggle_pause(self.pauseLabel, True)
+
+                time.sleep(0.2) # For giving time to the thread to close.
+                # if not self.movie_thread.isRunning() and not self.movie_thread.ThreadActive:
+                self.movie_thread.mode = 1
+
+                self.start_video("Play")
+
         else:
             exit("[ERROR]: UNKNOWN FILE ACTION!")
 
@@ -588,11 +604,12 @@ class MainWindow(QMainWindow):
     def camera_actions(self):
         button = self.sender()
         id = 0
-
         self.movie_thread.stop()
 
+        self.movie_thread.mode = 0
+
         for key, name in self.cameras.items():
-            if name == button.text():
+            if name == button.text()[4:]:
                 id = key
                 break
 
@@ -603,7 +620,7 @@ class MainWindow(QMainWindow):
 
     def toggle_record(self, button):
         button.setStyleSheet('background-color: rgb(40,40,40);')
-        if self.movie_thread.mode == "Play" and self.movie_thread.ThreadActive:
+        if self.movie_thread.mode == "Play" and self.movie_thread.ThreadActive and self.mode == 0:
             
             options = [n[0] for n in self.options if n[0] != -1]
 
@@ -631,7 +648,7 @@ class MainWindow(QMainWindow):
 
             
             if not self.movie_thread.record and self.movie_thread.recorded_data: # If record is dissabled, save record.
-                file_name, _ = QFileDialog.getSaveFileName(self, "Save CSV File", "readings", "CSV Files (*.csv)")
+                file_name, _ = QFileDialog.getSaveFileName(self, "Save CSV and MP4 File", "readings")
                 self.movie_thread.save_recording(file_name)
        
     def toggle_pause(self, button, force=False):
@@ -690,8 +707,6 @@ class MainWindow(QMainWindow):
                 self.defaultConfigMenu.addAction(action)
 
     def set_config(self, landmarks=None, axis=None):
-        self.movie_thread.recorded_data = list()
-
         if landmarks is None or axis is None:
             sender = self.sender()
             name = sender.text()
@@ -783,7 +798,6 @@ class MainWindow(QMainWindow):
         event.accept()
 
 
-
 class MovieThread(QThread, face_detector):
     ImageUpdate = pyqtSignal(np.ndarray)
     PauseUpdate = pyqtSignal()
@@ -796,19 +810,29 @@ class MovieThread(QThread, face_detector):
         self.ThreadActive = False
         self.record = False
         self.recorded_data = list()
+        self.recorded_images = list()
         self.pause = False
         self.video = Video(source)
-        
+        self.mode = 0
+        self.new_frame = False
+
     def run(self):
         self.ThreadActive = True
 
-        self.video.open_video(self.source)
+        ret = self.video.open_video(self.source)
+        if not ret:
+            self.stop()
 
         img = None
         ret = True
 
+
         while self.ThreadActive:
             if img is not None and self.pause: # Update of image while app paused to allow resize of paused image.
+                if self.new_frame:
+                    ret, img = self.video.get_frame()
+                    self.new_frame = False
+
                 self.ImageUpdate.emit(img)
                 time.sleep(0.1)
                 continue
@@ -820,24 +844,28 @@ class MovieThread(QThread, face_detector):
                 self.PauseUpdate.emit()
                 continue
 
-            self.process_image(img) #, int(cap.get(cv2.CAP_PROP_POS_MSEC)))
+            if self.mode == 0:
 
-            if self.mode == "Play":
-                self.measure_user_exercises_2()
+                self.process_image(img) #, int(cap.get(cv2.CAP_PROP_POS_MSEC)))
 
-                if self.blur_background:
-                    self.draw_blurred_background()
-    
-                img = self.draw_measurements_on_image_2()
+                if self.mode == "Play":
+                    self.measure_user_exercises_2()
 
-                self.record_exercise()
+                    if self.blur_background:
+                        self.draw_blurred_background()
+        
+                    img = self.draw_measurements_on_image_2()
 
-            elif self.mode == "Landmarks":
-                if self.blur_background:
-                    self.draw_blurred_background()
+                    self.record_exercise(img.copy())
 
-                img = self.draw_face_mesh_2()
+                elif self.mode == "Landmarks":
+                    if self.blur_background:
+                        self.draw_blurred_background()
 
+                    img = self.draw_face_mesh_2()
+                
+            else:
+                time.sleep(0.04)
 
             self.ImageUpdate.emit(img)
  
@@ -850,6 +878,7 @@ class MovieThread(QThread, face_detector):
         self.record = False
         self.pause = False
         self.recorded_data = list()
+        self.recorded_images = list()
 
         self.quit()
 
@@ -869,22 +898,34 @@ class MovieThread(QThread, face_detector):
     def receive_options(self, event):
         self.options = [x for x in event.copy() if x[0] != 1]
 
-    def record_exercise(self):
+    def record_exercise(self, img):
         if self.record and self.measures:
-                self.recorded_data.append(self.measures.copy())  
-
+                self.recorded_data.append(self.measures.copy())
+                self.recorded_images.append(img)
+                
     def save_recording(self, file_name):
         if not self.record and self.recorded_data:
             if file_name:
-                np.savetxt(file_name, self.recorded_data, delimiter=",")            # Save recorded data.
+                # Save recorded data.
+                np.savetxt(file_name + '.csv', self.recorded_data, delimiter=",")    
+                
+                # Save recorded video.
+                fourcc = cv2.VideoWriter_fourcc(*'MP4V')
+                video_out = cv2.VideoWriter(file_name + '.mp4', fourcc, 24.0, (640,480))
+                for frame in self.recorded_images:
+                    video_out.write(frame)
 
+                # Save maximum of recorded data.
                 maxims = np.max(self.recorded_data, axis=0).reshape(1,-1)
                 path, name = file_name.rsplit('/', 1)
-
-                np.savetxt(path+"/max_"+name, maxims, delimiter=",")     # Save maximum of recorded data.
+                np.savetxt(path+"/max_" + name + '.csv', maxims, delimiter=",")        
 
             self.recorded_data = list()
 
+    def jumpt_to_frame(self, frame_index):
+        self.pause = True
+        self.video.set_frame_index(frame_index)
+        self.new_frame = True
 
 
 class PlotWindow(QWidget):
@@ -956,6 +997,8 @@ class PlotWindow(QWidget):
 
 class PlotRecordedData(PlotWindow):
 
+    mouseClicked = pyqtSignal(int)
+
     def __init__(self):
         super().__init__()
 
@@ -963,11 +1006,23 @@ class PlotRecordedData(PlotWindow):
         label_style = {'color': '#EEE', 'font-size': '12pt'}
         self.plot_widget.setLabel('bottom', "Samples", **label_style)
         self.data = None
+        self.desired_frame = None
 
-    def load_data(self, file_name):
-        
+        # Create a scatter plot item for the hover point
+        self.hoverPoint = pg.ScatterPlotItem(size=10, brush=pg.mkBrush([100, 100, 100, 255]))
+
+        # Create a text item for displaying coordinates
+        self.hoverText = pg.TextItem(anchor=(0.5, -1.5), color='w')
+        self.plot_widget.addItem(self.hoverText)
+
+        # Enable mouse tracking
+        self.plot_widget.setMouseTracking(True)  # Enable mouse tracking on the plot widget
+        self.old_event = self.plot_widget.mouseMoveEvent
+        self.plot_widget.mouseMoveEvent = self.custom_mouseMoveEvent
+
+    def load_data(self, file_name):        
         self.plot_widget.clear()
-        
+
         self.data = np.loadtxt(file_name, delimiter=",", dtype=float).transpose()
         if not len(self.data): return
 
@@ -990,6 +1045,43 @@ class PlotRecordedData(PlotWindow):
 
         self.plot_widget.getViewBox().autoRange() # Autofocus on the data.
 
+        self.plot_widget.addItem(self.hoverPoint)
+        self.plot_widget.addItem(self.hoverText)
+
+    def mousePressEvent(self, event):
+        pos = event.pos()
+        if self.plot_widget.sceneBoundingRect().contains(pos):
+            if self.desired_frame is not None:
+                self.mouseClicked.emit(self.desired_frame)
+
+        super().mousePressEvent(event)
+
+    def custom_mouseMoveEvent(self, event):
+        pos = event.pos()
+        if self.plot_widget.sceneBoundingRect().contains(pos):
+            mouse_point = self.plot_widget.plotItem.vb.mapSceneToView(pos)
+            x, y = np.clip(mouse_point.x(), 0, len(self.data[0])-1), mouse_point.y()
+            # Calculate closest data point
+            closest_distance = float('inf')
+            closest_coordinates = None
+            for y_data in self.data:
+                index = round(x)
+                distance = abs(y_data[index] - y)
+                if distance < closest_distance:
+                    closest_distance = distance
+                    closest_coordinates = (round(x), y_data[index])
+
+            if closest_coordinates and closest_distance < 1:  # specify your radius here
+                self.hoverPoint.setData([closest_coordinates[0]], [closest_coordinates[1]])
+                self.hoverText.setPos(closest_coordinates[0], closest_coordinates[1])
+                self.hoverText.setHtml(f"<div style='color: white;'>({closest_coordinates[0]:.2f}, {closest_coordinates[1]:.2f})</div>")
+                self.desired_frame = closest_coordinates[0]
+            else:
+                self.hoverPoint.setData([], [])  # Clear data if no close point
+                self.hoverText.setText("")
+                self.desired_frame = None
+
+        self.old_event(event)
         
 if __name__ == "__main__":
 
