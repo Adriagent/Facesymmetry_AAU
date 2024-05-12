@@ -324,7 +324,7 @@ class MainWindow(QMainWindow):
         self.vbox = QVBoxLayout()
 
         self.vbox.addStretch()
-        for _ in range(4):
+        for _ in range(2):
             self.add_scroll_option()
 
 
@@ -366,6 +366,8 @@ class MainWindow(QMainWindow):
         self.scroll.setWidget(widget)
 
     def add_scroll_option(self):
+        if self.vbox.count() >= 3: return
+
         options_layout = QHBoxLayout()
         options_layout.setContentsMargins(0,10,0,10)
 
@@ -538,19 +540,26 @@ class MainWindow(QMainWindow):
             file_name, _ = QFileDialog.getOpenFileName(filter="CSV files (*.csv)")
 
             if file_name:
+                # self.movie_thread.stop()
                 self.plot_recorded_data.load_data(file_name)
                 self.plot_recorded_data.show()
 
+                
                 # Opening recorded video.
                 source = file_name.split(".")[0] + ".mp4"
 
                 self.movie_thread.source = source
+                self.movie_thread.video.open_video(source)
+                self.movie_thread.record = False
                 self.toggle_pause(self.pauseLabel, True)
+                self.movie_thread.recorded_data = list()
+                self.movie_thread.recorded_images = list()
+
+
+                self.movie_thread.mode = "Re-Play"
 
                 time.sleep(0.2) # For giving time to the thread to close.
-                # if not self.movie_thread.isRunning() and not self.movie_thread.ThreadActive:
-                self.movie_thread.mode = 1
-
+                self.movie_thread.new_frame = True
                 self.start_video("Play")
 
         else:
@@ -585,7 +594,7 @@ class MainWindow(QMainWindow):
                 self.plot_window.show()
 
         elif button.text() == self.config_clear.text():
-            self.set_config(["", "", "", ""],[0,0,0,0])
+            self.set_config(["", ""],[0,0])
 
     def find_cameras(self, cameraMenu, cameraLabel):
         self.cameras = self.movie_thread.video.find_cameras()
@@ -606,21 +615,19 @@ class MainWindow(QMainWindow):
         id = 0
         self.movie_thread.stop()
 
-        self.movie_thread.mode = 0
-
         for key, name in self.cameras.items():
             if name == button.text()[4:]:
                 id = key
                 break
 
         self.movie_thread.source = id
-        
+        self.movie_thread.mode = "Play"
         time.sleep(0.2) # For giving time to the thread to close.
         self.start_video("Play")
 
     def toggle_record(self, button):
         button.setStyleSheet('background-color: rgb(40,40,40);')
-        if self.movie_thread.mode == "Play" and self.movie_thread.ThreadActive and self.mode == 0:
+        if self.movie_thread.mode == "Play" and self.movie_thread.ThreadActive:
             
             options = [n[0] for n in self.options if n[0] != -1]
 
@@ -813,7 +820,6 @@ class MovieThread(QThread, face_detector):
         self.recorded_images = list()
         self.pause = False
         self.video = Video(source)
-        self.mode = 0
         self.new_frame = False
 
     def run(self):
@@ -844,8 +850,9 @@ class MovieThread(QThread, face_detector):
                 self.PauseUpdate.emit()
                 continue
 
-            if self.mode == 0:
-
+            if self.mode == "Re-Play":
+                time.sleep(0.04)
+            else:
                 self.process_image(img) #, int(cap.get(cv2.CAP_PROP_POS_MSEC)))
 
                 if self.mode == "Play":
@@ -856,7 +863,8 @@ class MovieThread(QThread, face_detector):
         
                     img = self.draw_measurements_on_image_2()
 
-                    self.record_exercise(img.copy())
+                    if self.record:
+                        self.record_exercise(img.copy())
 
                 elif self.mode == "Landmarks":
                     if self.blur_background:
@@ -864,9 +872,6 @@ class MovieThread(QThread, face_detector):
 
                     img = self.draw_face_mesh_2()
                 
-            else:
-                time.sleep(0.04)
-
             self.ImageUpdate.emit(img)
  
         self.stop()
@@ -956,6 +961,7 @@ class PlotWindow(QWidget):
         self.cmap = plt.get_cmap("tab10")
 
         self.size_data = 400
+        self.names = "Left", "Right"
 
     def set_lines(self, options):
         self.plot_widget.clear()
@@ -966,10 +972,10 @@ class PlotWindow(QWidget):
         self.time = []
         self.data = [[] for _ in lines_ids] 
         self.lines = []
-
+        
         for i, id in enumerate(lines_ids):
             color = np.array(self.cmap(i))*255
-            line = self.plot_widget.plot(name=str(id), pen=pg.mkPen(color=color, width=2))
+            line = self.plot_widget.plot(name=self.names[id], pen=pg.mkPen(color=color, width=2))
             self.lines.append(line)
 
     def update_plot(self, measures):
@@ -1035,7 +1041,7 @@ class PlotRecordedData(PlotWindow):
             color = np.array(self.cmap(id))*255
             max_id = np.argmax(line)
             min_id = np.argmin(line)
-            name = f'{id} - (max:{line[max_id]:.3f} , min:{line[min_id]:.3f})'
+            name = f'{self.names[id]} - (max:{line[max_id]:.3f} , min:{line[min_id]:.3f})'
             
             scatter = pg.ScatterPlotItem(size=10, brush=pg.mkBrush(color))
             scatter.addPoints([max_id, min_id], [line[max_id], line[min_id]])
