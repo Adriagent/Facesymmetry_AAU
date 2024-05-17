@@ -40,6 +40,9 @@ class face_detector:
         self.cmap = get_cmap("tab10")
         self.mask = None
 
+        self.V_DIST_PX_old = None
+        self.pixel_to_mm_factor = 1
+
         self.init_face_detector()
 
     def init_face_detector(self):
@@ -264,7 +267,7 @@ class face_detector:
         ### Getting vertical distance.
         VA_px = self.normalized_to_pixel(landmarks[10])
         VB_px = self.normalized_to_pixel(landmarks[152])
-        V_DIST_PX = np.linalg.norm(VA_px-VB_px)
+        self.V_DIST_PX = np.linalg.norm(VA_px-VB_px)
 
         ### Getting Vertical symetric line points.
         VA_px = self.normalized_to_pixel(landmarks[10])
@@ -287,7 +290,11 @@ class face_detector:
         ######## CUSTOMIZABLE PART ######
         self.measures = []
         self.drawing_data = []
+        if self.V_DIST_PX_old is None:
+            self.V_DIST_PX_old = self.V_DIST_PX
 
+        current_to_original_px  = self.V_DIST_PX_old / self.V_DIST_PX # Scale factor for re-scaling a px distance to the original px distance when the card was captured.
+        
         for point_id, A_axis_id, B_axis_id in self.options:
 
             if point_id == -1: continue
@@ -301,10 +308,12 @@ class face_detector:
             I_px = np.round(I).astype(int)
 
             dist_px = np.linalg.norm(P_px - I_px)
-            dist_norm = dist_px / V_DIST_PX     # Distance normalized to be scale invariant.
+
+            original_dist_px        = dist_px * current_to_original_px
+            dist_mm                 = original_dist_px * self.pixel_to_mm_factor
 
             self.drawing_data.append((P_px, I_px))
-            self.measures.append(dist_norm)
+            self.measures.append(dist_mm)
 
         return self.measures, self.drawing_data
 

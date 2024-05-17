@@ -1,4 +1,4 @@
-import cv2
+import cv2, numpy as np
 from pygrabber.dshow_graph import FilterGraph
 
 class Video:

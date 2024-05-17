@@ -124,6 +124,7 @@ class MainWindow(QMainWindow):
 
     default_config_path = resource_path("./config/default_config.json")
     saved_config_path = resource_path("./config/saved_config.json")
+    
     background_img_path = resource_path("./media/background2.png")
     # icon_img_path = resource_path("./media/icon2.png")
     
@@ -144,7 +145,10 @@ class MainWindow(QMainWindow):
         self.plot_recorded_data = PlotRecordedData()
         self.options = []
         self.cameras = {}
-
+        self.card_points = []
+        self.card_length_mm = 85.60 # 85 mm 
+        self.card_length_px = 1
+        self.vertical_real_length = 1
 
         self.plot_recorded_data.mouseClicked.connect(self.movie_thread.jumpt_to_frame)
 
@@ -243,10 +247,44 @@ class MainWindow(QMainWindow):
         QLabel.resizeEvent(self.image, event)
 
     def image_clicked_event(self, event):
-        if self.movie_thread.isRunning() and self.label_to_modify and self.movie_thread.landmark_id:
+        if not self.movie_thread.isRunning(): return
+
+        if self.label_to_modify and self.movie_thread.landmark_id:
             id = str(self.movie_thread.landmark_id)
             self.label_to_modify.setText(id)
 
+        elif self.settings_scale.isChecked():
+            x = event.pos().x()
+            y = event.pos().y()
+
+            img_H = self.image.pixmap().height()
+            img_W = self.image.pixmap().width()
+            shape = (img_H, img_W)
+
+            offset_y = (self.image.height()-img_H)/2
+            y = int(y - offset_y)
+
+            h, w = shape
+            height, width = self.movie_thread.image.shape[:2]
+
+            new_x =  round(x  / w * width)
+            new_y =  round(y  / h * height)
+
+            point = np.array([new_x, new_y])
+            
+            if len(self.card_points) > 1:
+                self.card_points = []
+
+            self.card_points.append(point)
+
+
+            if len(self.card_points) > 1:
+                p1, p2 = self.card_points
+                card_length_px = np.linalg.norm(p1-p2) # card side length in pixels.
+
+                self.movie_thread.pixel_to_mm_factor = self.card_length_mm / card_length_px
+                self.movie_thread.V_DIST_PX_old = self.movie_thread.V_DIST_PX
+                         
     def image_mouse_moved_event(self,event):
         if self.movie_thread.isRunning():
             x = event.pos().x()
@@ -270,6 +308,9 @@ class MainWindow(QMainWindow):
 
         if self.movie_thread.pause:
             cv2_img = self.print_pause(cv2_img)
+
+        if self.settings_scale.isChecked():
+            cv2_img = self.print_card_line(cv2_img)
 
         image = QImage(cv2_img.data, cv2_img.shape[1], cv2_img.shape[0], QImage.Format_RGB888).rgbSwapped()
         self.image.setPixmap(QPixmap(image).scaled(self.image.width(), self.image.height(), Qt.KeepAspectRatio, Qt.SmoothTransformation))
@@ -300,6 +341,15 @@ class MainWindow(QMainWindow):
         A = (img.shape[1]//2+10 , img.shape[0]//2 + min(img.shape[:2])//40)
         B = (img.shape[1]//2+5  , img.shape[0]//2 - min(img.shape[:2])//40)
         img = cv2.rectangle(img, A, B, color=(200,200,200), thickness=2) 
+
+        return img
+
+    def print_card_line(self, img):
+        for point in self.card_points:
+            img = cv2.circle(img, point, 2, (0, 255, 200), -1)
+
+        if len(self.card_points) > 1:
+            img = cv2.line(img, self.card_points[0], self.card_points[1], (0, 255, 200), 1)
 
         return img
 
@@ -464,19 +514,22 @@ class MainWindow(QMainWindow):
         settingsLabel.mousePressEvent = lambda _: self.show_menu(settingsMenu, settingsLabel)
 
         self.settings_landmarks = QAction(" Show Facial Landmarks", settingsMenu, triggered=self.settings_actions, checkable=True)
-        self.settings_axis      = QAction(" Show Reference Lines", settingsMenu, triggered=self.settings_actions, checkable=True, checked=True, enabled=False)
-        self.settings_fps       = QAction(" Show FPS", settingsMenu, triggered=self.settings_actions, checkable=True)
-        self.settings_contour   = QAction(" Show Facial Contour", settingsMenu, triggered=self.settings_actions, checkable=True, checked=True)
+        self.settings_axis      = QAction(" Show Reference Lines",  settingsMenu, triggered=self.settings_actions, checkable=True, checked=True, enabled=False)
+        self.settings_scale     = QAction(" Set Measures Scale",    settingsMenu, triggered=self.settings_actions, checkable=True)
+        self.settings_fps       = QAction(" Show FPS",              settingsMenu, triggered=self.settings_actions, checkable=True)
+        self.settings_contour   = QAction(" Show Facial Contour",   settingsMenu, triggered=self.settings_actions, checkable=True, checked=True)
         self.settings_plot      = QAction("      Show Plot Window", settingsMenu, triggered=self.settings_actions)
-        self.settings_blur      = QAction(" Blur background", settingsMenu, triggered=self.settings_actions, checkable=True)
-        
-        settingsMenu.addActions([self.settings_landmarks, self.settings_axis, self.settings_fps, self.settings_contour, self.settings_plot])
+        self.settings_blur      = QAction(" Blur background",       settingsMenu, triggered=self.settings_actions, checkable=True)
+
+        settingsMenu.addActions([self.settings_landmarks, self.settings_axis, self.settings_scale])
+        settingsMenu.addSeparator()
+        settingsMenu.addActions([self.settings_fps, self.settings_contour, self.settings_plot])
         settingsMenu.addSeparator()
         settingsMenu.addAction(self.settings_blur)
         settingsMenu.addSeparator()
 
-        self.defaultConfigMenu = settingsMenu.addMenu("      Default Outcome Measures")
-        self.savedConfigMenu = settingsMenu.addMenu("      Saved Outcome Measures")
+        self.defaultConfigMenu  = settingsMenu.addMenu("      Default Outcome Measures")
+        self.savedConfigMenu    = settingsMenu.addMenu("      Saved Outcome Measures")
         
         self.config_clear = QAction(" Clear Configuration", self, triggered=self.settings_actions)
         self.defaultConfigMenu.addAction(self.config_clear)
@@ -580,14 +633,14 @@ class MainWindow(QMainWindow):
 
             self.movie_thread.mode = "Play" if button.text() == self.settings_axis.text() else "Landmarks"
 
+        elif button.text() == self.settings_scale.text():
+            pass
+
         elif button.text() == self.settings_fps.text():
             self.show_fps = not self.show_fps
 
         elif button.text() == self.settings_contour.text():
             self.movie_thread.show_contour = not self.movie_thread.show_contour
-
-        elif button.text() == self.settings_blur.text():
-            self.movie_thread.blur_background = not self.movie_thread.blur_background
         
         elif button.text() == self.settings_plot.text():
             if not self.plot_window.isVisible():
@@ -621,7 +674,8 @@ class MainWindow(QMainWindow):
                 break
 
         self.movie_thread.source = id
-        self.movie_thread.mode = "Play"
+        if not self.movie_thread.mode in ["Play", "Landmarks"]:
+            self.movie_thread.mode = "Play"
         time.sleep(0.2) # For giving time to the thread to close.
         self.start_video("Play")
 
@@ -839,7 +893,7 @@ class MovieThread(QThread, face_detector):
                     ret, img = self.video.get_frame()
                     self.new_frame = False
 
-                self.ImageUpdate.emit(img)
+                self.ImageUpdate.emit(img.copy())
                 time.sleep(0.1)
                 continue
 
@@ -852,6 +906,7 @@ class MovieThread(QThread, face_detector):
 
             if self.mode == "Re-Play":
                 time.sleep(0.04)
+                
             else:
                 self.process_image(img) #, int(cap.get(cv2.CAP_PROP_POS_MSEC)))
 
@@ -871,7 +926,7 @@ class MovieThread(QThread, face_detector):
                         self.draw_blurred_background()
 
                     img = self.draw_face_mesh_2()
-                
+
             self.ImageUpdate.emit(img)
  
         self.stop()
@@ -947,7 +1002,7 @@ class PlotWindow(QWidget):
         self.plot_widget.setTitle("Measurements")
         label_style = {'color': '#EEE', 'font-size': '12pt'}
         self.plot_widget.setLabel('bottom', "Time", "s", **label_style)
-        self.plot_widget.setLabel('left', "Distance", "pixel/faceHeight", **label_style)
+        self.plot_widget.setLabel('left', "Distance", "mm", **label_style)
         self.plot_widget.getAxis('left').enableAutoSIPrefix(False)
         self.plot_widget.getAxis('bottom').enableAutoSIPrefix(False)
         
@@ -998,7 +1053,6 @@ class PlotWindow(QWidget):
                 self.data[i] = self.data[i][1:]
             
             line.setData(self.time, self.data[i])
-
 
 
 class PlotRecordedData(PlotWindow):
