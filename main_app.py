@@ -641,6 +641,9 @@ class MainWindow(QMainWindow):
 
         elif button.text() == self.settings_contour.text():
             self.movie_thread.show_contour = not self.movie_thread.show_contour
+
+        elif button.text() == self.settings_blur.text():
+            self.movie_thread.blur_background = not self.movie_thread.blur_background
         
         elif button.text() == self.settings_plot.text():
             if not self.plot_window.isVisible():
