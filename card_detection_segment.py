@@ -5,7 +5,7 @@ import time
 
 class Detector:
 
-    model_path = './selfie_multiclass_256x256.tflite'
+    model_path = './models/selfie_multiclass_256x256.tflite'
     
     def __init__(self):
         self.timestamp_ms = 0

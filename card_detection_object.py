@@ -10,7 +10,7 @@ class Detector:
 
     def __init__(self):
         self.timestamp_ms = 0
-        self.detections = None
+        self.detections = []
         self.start_times = {}
         self.processing_complete = True  # Flag to track processing state
 
@@ -59,21 +59,24 @@ class Detector:
         self.detections = result.detections
         self.processing_complete = True  # Set processing to True when done
 
-def draw_detections(frame, detections):
-    for detection in detections:
-        bbox = detection.bounding_box
-        start_point = (int(bbox.origin_x), int(bbox.origin_y))
-        end_point = (int(bbox.origin_x + bbox.width), int(bbox.origin_y + bbox.height))
-        cv2.rectangle(frame, start_point, end_point, (0, 255, 0), 2)
+    def draw_detections(self, frame):
+        for detection in self.detections:
+            bbox = detection.bounding_box
+            x, y, w, h = int(bbox.origin_x), int(bbox.origin_y), int(bbox.width), int(bbox.height)
+            cropped_image = frame[y:y+h, x:x+w].copy()
+            bbox = detection.bounding_box
+            start_point = (int(bbox.origin_x), int(bbox.origin_y))
+            end_point = (int(bbox.origin_x + bbox.width), int(bbox.origin_y + bbox.height))
+            cv2.rectangle(frame, start_point, end_point, (0, 255, 0), 2)
 
-        # Draw label and confidence score
-        label = detection.categories[0].category_name
-        score = detection.categories[0].score
-        label_text = f'{label}: {score:.2f}'
-        label_position = (start_point[0], start_point[1] - 10)
-        cv2.putText(frame, label_text, label_position, cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 2)
-    
-    return frame
+            # Draw label and confidence score
+            label = detection.categories[0].category_name
+            score = detection.categories[0].score
+            label_text = f'{label}: {score:.2f}'
+            label_position = (start_point[0], start_point[1] - 10)
+            cv2.putText(frame, label_text, label_position, cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 2)
+        
+        return frame, cropped_image
 
 if __name__ == "__main__":
     detector = Detector()
@@ -89,7 +92,8 @@ if __name__ == "__main__":
 
         if detector.detections:
             # Draw the detections on the frame
-            frame = draw_detections(frame, detector.detections)
+            frame, crop = detector.draw_detections(frame)
+            cv2.imshow('Crop', crop)
 
         cv2.imshow('Frame', frame)
         if cv2.waitKey(1) & 0xFF == ord('q'):
