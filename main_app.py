@@ -10,7 +10,7 @@ from PyQt5.QtCore import *
 from PyQt5.QtWidgets import *
 
 from video_controller import Video
-from main_detection import face_detector
+from main_detection import Main_Detection
 
 
 def resource_path(relative_path):
@@ -146,8 +146,6 @@ class MainWindow(QMainWindow):
         self.options = []
         self.cameras = {}
         self.card_points = []
-        self.card_length_mm = 85.60 # 85 mm 
-        self.card_length_px = 1
         self.vertical_real_length = 1
 
         self.plot_recorded_data.mouseClicked.connect(self.movie_thread.jumpt_to_frame)
@@ -253,7 +251,7 @@ class MainWindow(QMainWindow):
             id = str(self.movie_thread.landmark_id)
             self.label_to_modify.setText(id)
 
-        elif self.settings_scale.isChecked():
+        elif self.settings_scale_manual.isChecked():
             x = event.pos().x()
             y = event.pos().y()
 
@@ -282,7 +280,7 @@ class MainWindow(QMainWindow):
                 p1, p2 = self.card_points
                 card_length_px = np.linalg.norm(p1-p2) # card side length in pixels.
 
-                self.movie_thread.pixel_to_mm_factor = self.card_length_mm / card_length_px
+                self.movie_thread.pixel_to_mm_factor = self.movie_thread.card_length_mm / card_length_px
                 self.movie_thread.V_DIST_PX_old = self.movie_thread.V_DIST_PX
                          
     def image_mouse_moved_event(self,event):
@@ -309,7 +307,7 @@ class MainWindow(QMainWindow):
         if self.movie_thread.pause:
             cv2_img = self.print_pause(cv2_img)
 
-        if self.settings_scale.isChecked():
+        if self.settings_scale_manual.isChecked():
             cv2_img = self.print_card_line(cv2_img)
 
         image = QImage(cv2_img.data, cv2_img.shape[1], cv2_img.shape[0], QImage.Format_RGB888).rgbSwapped()
@@ -515,13 +513,14 @@ class MainWindow(QMainWindow):
 
         self.settings_landmarks = QAction(" Show Facial Landmarks", settingsMenu, triggered=self.settings_actions, checkable=True)
         self.settings_axis      = QAction(" Show Reference Lines",  settingsMenu, triggered=self.settings_actions, checkable=True, checked=True, enabled=False)
-        self.settings_scale     = QAction(" Set Measures Scale",    settingsMenu, triggered=self.settings_actions, checkable=True)
+        self.settings_scale_manual  = QAction(" Set Measures Scale (Manual)", settingsMenu, triggered=self.settings_actions, checkable=True)
+        self.settings_scale_auto    = QAction(" Set Measures Scale (Auto)", settingsMenu, triggered=self.settings_actions, checkable=True)
         self.settings_fps       = QAction(" Show FPS",              settingsMenu, triggered=self.settings_actions, checkable=True)
         self.settings_contour   = QAction(" Show Facial Contour",   settingsMenu, triggered=self.settings_actions, checkable=True, checked=True)
         self.settings_plot      = QAction("      Show Plot Window", settingsMenu, triggered=self.settings_actions)
         self.settings_blur      = QAction(" Blur background",       settingsMenu, triggered=self.settings_actions, checkable=True)
 
-        settingsMenu.addActions([self.settings_landmarks, self.settings_axis, self.settings_scale])
+        settingsMenu.addActions([self.settings_landmarks, self.settings_axis, self.settings_scale_manual, self.settings_scale_auto])
         settingsMenu.addSeparator()
         settingsMenu.addActions([self.settings_fps, self.settings_contour, self.settings_plot])
         settingsMenu.addSeparator()
@@ -633,7 +632,7 @@ class MainWindow(QMainWindow):
 
             self.movie_thread.mode = "Play" if button.text() == self.settings_axis.text() else "Landmarks"
 
-        elif button.text() == self.settings_scale.text():
+        elif button.text() == self.settings_scale_manual.text():
             pass
 
         elif button.text() == self.settings_fps.text():
@@ -648,6 +647,9 @@ class MainWindow(QMainWindow):
         elif button.text() == self.settings_plot.text():
             if not self.plot_window.isVisible():
                 self.plot_window.show()
+
+        elif button.text() == self.settings_scale_auto.text():
+            self.movie_thread.enable_card_detection = button.isChecked()
 
         elif button.text() == self.config_clear.text():
             self.set_config(["", ""],[0,0])
@@ -862,7 +864,7 @@ class MainWindow(QMainWindow):
         event.accept()
 
 
-class MovieThread(QThread, face_detector):
+class MovieThread(QThread, Main_Detection):
     ImageUpdate = pyqtSignal(np.ndarray)
     PauseUpdate = pyqtSignal()
 
@@ -889,11 +891,10 @@ class MovieThread(QThread, face_detector):
         img = None
         ret = True
 
-
         while self.ThreadActive:
             if img is not None and self.pause: # Update of image while app paused to allow resize of paused image.
                 if self.new_frame:
-                    ret, img = self.video.get_frame()
+                    _, img = self.video.get_frame()
                     self.new_frame = False
 
                 self.ImageUpdate.emit(img.copy())
@@ -909,18 +910,20 @@ class MovieThread(QThread, face_detector):
 
             if self.mode == "Re-Play":
                 time.sleep(0.04)
-                
             else:
                 self.process_image(img) #, int(cap.get(cv2.CAP_PROP_POS_MSEC)))
 
                 if self.mode == "Play":
-                    self.measure_user_exercises_2()
-
+                    self.measure_user_exercises()
+                    
                     if self.blur_background:
                         self.draw_blurred_background()
         
-                    img = self.draw_measurements_on_image_2()
+                    img = self.draw_measurements_on_image()
 
+                    if self.enable_card_detection:
+                        img = self.draw_card_detection()
+                        
                     if self.record:
                         self.record_exercise(img.copy())
 
@@ -928,7 +931,11 @@ class MovieThread(QThread, face_detector):
                     if self.blur_background:
                         self.draw_blurred_background()
 
-                    img = self.draw_face_mesh_2()
+                    img = self.draw_face_mesh()
+
+                elif self.mode == "Card_auto":
+                    None
+                    # Get card detection.
 
             self.ImageUpdate.emit(img)
  
