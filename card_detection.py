@@ -1,12 +1,15 @@
-import cv2
-import numpy as np
+import cv2, sys, os
 import mediapipe as mp
 import time
 
+def resource_path(relative_path):
+    if hasattr(sys, '_MEIPASS'):
+        return os.path.join(sys._MEIPASS, relative_path)
+    return os.path.join(os.path.abspath("."), relative_path)
 
 class Card_Detector:
 
-    model_path = 'models/efficientdet_lite0_32.tflite'
+    model_path = resource_path('models/efficientdet_lite0_32.tflite')
 
     def __init__(self):
         self.timestamp_ms = 0
