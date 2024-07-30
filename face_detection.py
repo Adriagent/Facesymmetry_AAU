@@ -1,5 +1,4 @@
 import mediapipe as mp
-import cv2, time, numpy as np
 import os, sys
 
 def resource_path(relative_path):
