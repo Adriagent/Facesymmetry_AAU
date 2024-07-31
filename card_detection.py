@@ -1,4 +1,6 @@
-import cv2, sys, os
+import cv2
+import sys
+import os
 import mediapipe as mp
 import time
 
