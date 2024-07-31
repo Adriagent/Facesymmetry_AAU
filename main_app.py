@@ -26,6 +26,8 @@ from PyQt5.QtWidgets import (
     QPushButton,
     QLineEdit,
     QComboBox,
+    QFileDialog,
+    QMessageBox,
 )
 
 from video_controller import Video
@@ -808,8 +810,9 @@ class MainWindow(QMainWindow):
                 break
 
         self.movie_thread.source = id
-        if not self.movie_thread.mode in ["Play", "Landmarks"]:
+        if self.movie_thread.mode not in ["Play", "Landmarks"]:
             self.movie_thread.mode = "Play"
+
         time.sleep(0.2)  # For giving time to the thread to close.
         self.start_video("Play")
 
