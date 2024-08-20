@@ -1015,6 +1015,7 @@ class MovieThread(QThread, Main_Detection):
         self.pause = False
         self.video = Video(source)
         self.new_frame = False
+        self.timer_start = 0
 
     def run(self):
         self.ThreadActive = True
@@ -1086,6 +1087,7 @@ class MovieThread(QThread, Main_Detection):
         self.pause = False
         self.recorded_data = list()
         self.recorded_images = list()
+        self.timer_start = 0
 
         self.quit()
 
@@ -1108,14 +1110,16 @@ class MovieThread(QThread, Main_Detection):
 
     def record_exercise(self, img):
         if self.record and self.measures:
-            self.recorded_data.append(self.measures.copy())
+            if not self.timer_start:
+                self.timer_start = time.time()
+            self.recorded_data.append([time.time() - self.timer_start] + self.measures.copy())
             self.recorded_images.append(img)
 
     def save_recording(self, file_name):
         if not self.record and self.recorded_data:
             if file_name:
                 # Save recorded data.
-                np.savetxt(file_name + ".csv", self.recorded_data, delimiter=";", fmt='%1.3f', header="Left;Right", comments="")
+                np.savetxt(file_name + ".csv", self.recorded_data, delimiter=";", fmt='%1.3f', header="Time(s);Left(mm);Right(mm)", comments="")
 
                 # Save recorded video.
                 fourcc = cv2.VideoWriter_fourcc(*"MP4V")
@@ -1126,6 +1130,7 @@ class MovieThread(QThread, Main_Detection):
                     video_out.write(frame)
 
             self.recorded_data = list()
+            self.timer_start = 0
 
     def jumpt_to_frame(self, frame_index):
         self.pause = True
@@ -1239,21 +1244,23 @@ class PlotRecordedData(PlotWindow):
         if not isinstance(self.data[0], np.ndarray):
             self.data = [self.data]
 
-        step = np.arange(len(self.data[0]))
+        # step = np.arange(len(self.data[0]))
+        step = self.data[0]
 
-        for id, line in enumerate(self.data):
+        for id, line in enumerate(self.data[1:]):
             color = np.array(self.cmap(id)) * 255
             max_id = np.argmax(line)
             min_id = np.argmin(line)
+
             name = (
                 f"{self.names[id]} - (max:{line[max_id]:.3f} , min:{line[min_id]:.3f})"
             )
 
             scatter = pg.ScatterPlotItem(size=10, brush=pg.mkBrush(color))
-            scatter.addPoints([max_id, min_id], [line[max_id], line[min_id]])
+            scatter.addPoints([self.data[0][max_id], self.data[0][min_id]], [line[max_id], line[min_id]])
 
             self.plot_widget.plot(
-                step, line, name=name, pen=pg.mkPen(color=color, width=1)
+                step, line, name = name, pen=pg.mkPen(color=color, width=1)
             )
             self.plot_widget.addItem(scatter)
 
@@ -1274,16 +1281,22 @@ class PlotRecordedData(PlotWindow):
         pos = event.pos()
         if self.plot_widget.sceneBoundingRect().contains(pos):
             mouse_point = self.plot_widget.plotItem.vb.mapSceneToView(pos)
-            x, y = np.clip(mouse_point.x(), 0, len(self.data[0]) - 1), mouse_point.y()
+            x, y = np.clip(mouse_point.x(), 0, self.data[0][-1]), mouse_point.y()
+
+            index = 0
+            for i, x_data in enumerate(self.data[0]):
+                if x_data >= x:
+                    index = i
+                    break
+
             # Calculate closest data point
             closest_distance = float("inf")
             closest_coordinates = None
-            for y_data in self.data:
-                index = round(x)
+            for y_data in self.data[1:]:
                 distance = abs(y_data[index] - y)
                 if distance < closest_distance:
                     closest_distance = distance
-                    closest_coordinates = (round(x), y_data[index])
+                    closest_coordinates = (x, y_data[index])
 
             if closest_coordinates and closest_distance < 1:  # specify your radius here
                 self.hoverPoint.setData(
@@ -1293,7 +1306,7 @@ class PlotRecordedData(PlotWindow):
                 self.hoverText.setHtml(
                     f"<div style='color: white;'>({closest_coordinates[0]:.2f}, {closest_coordinates[1]:.2f})</div>"
                 )
-                self.desired_frame = closest_coordinates[0]
+                self.desired_frame = index
             else:
                 self.hoverPoint.setData([], [])  # Clear data if no close point
                 self.hoverText.setText("")
