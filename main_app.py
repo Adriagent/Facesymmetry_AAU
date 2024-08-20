@@ -6,7 +6,6 @@ import cv2
 import numpy as np
 import pyqtgraph as pg
 import matplotlib.pyplot as plt
-import pandas
 
 from matplotlib.colors import rgb2hex
 from PyQt5.QtGui import QImage, QPixmap, QIntValidator
@@ -1116,7 +1115,7 @@ class MovieThread(QThread, Main_Detection):
         if not self.record and self.recorded_data:
             if file_name:
                 # Save recorded data.
-                np.savetxt(file_name + ".csv", self.recorded_data, delimiter=",", fmt='%1.3f')
+                np.savetxt(file_name + ".csv", self.recorded_data, delimiter=";", fmt='%1.3f', header="Left;Right", comments="")
 
                 # Save recorded video.
                 fourcc = cv2.VideoWriter_fourcc(*"MP4V")
@@ -1233,7 +1232,7 @@ class PlotRecordedData(PlotWindow):
     def load_data(self, file_name):
         self.plot_widget.clear()
 
-        self.data = np.loadtxt(file_name, delimiter=",", dtype=float).transpose()
+        self.data = np.loadtxt(file_name, delimiter=";", dtype=float, skiprows=1).transpose()
         if not len(self.data):
             return
 
