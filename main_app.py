@@ -1214,7 +1214,7 @@ class PlotRecordedData(PlotWindow):
 
         self.setWindowTitle("Recorded Data Plot")
         label_style = {"color": "#EEE", "font-size": "12pt"}
-        self.plot_widget.setLabel("bottom", "Samples", **label_style)
+        self.plot_widget.setLabel("bottom", "Seconds", **label_style)
         self.data = None
         self.desired_frame = None
 
@@ -1238,6 +1238,7 @@ class PlotRecordedData(PlotWindow):
         self.plot_widget.clear()
 
         self.data = np.loadtxt(file_name, delimiter=";", dtype=float, skiprows=1).transpose()
+        self.plot_widget.setTitle(os.path.basename(file_name).split(".")[0])
         if not len(self.data):
             return
 
