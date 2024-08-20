@@ -10,26 +10,9 @@ import matplotlib.pyplot as plt
 from matplotlib.colors import rgb2hex
 from PyQt5.QtGui import QImage, QPixmap, QIntValidator
 from PyQt5.QtCore import pyqtSignal, QThread, Qt, QPoint
-from PyQt5.QtWidgets import (
-    QMainWindow,
-    QApplication,
-    QWidget,
-    QVBoxLayout,
-    QHBoxLayout,
-    QSizePolicy,
-    QSpacerItem,
-    QMenu,
-    QLabel,
-    QAction,
-    QWidgetAction,
-    QScrollArea,
-    QPushButton,
-    QLineEdit,
-    QComboBox,
-    QFileDialog,
-    QMessageBox,
-)
-
+from PyQt5.QtWidgets import (QMainWindow, QApplication, QWidget, QVBoxLayout, QHBoxLayout,
+                            QSizePolicy, QSpacerItem, QMenu, QLabel, QAction, QWidgetAction,
+                            QScrollArea, QPushButton, QLineEdit, QComboBox, QFileDialog, QMessageBox)
 from video_controller import Video
 from main_detection import Main_Detection
 
