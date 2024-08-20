@@ -1,6 +1,9 @@
 import mediapipe as mp
-import cv2, time, numpy as np
-import os, sys
+import os
+import sys
+import cv2
+import time
+import numpy as np
 
 from matplotlib.pyplot import get_cmap
 from mediapipe.framework.formats import landmark_pb2

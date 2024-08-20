@@ -6,6 +6,7 @@ import cv2
 import numpy as np
 import pyqtgraph as pg
 import matplotlib.pyplot as plt
+import pandas
 
 from matplotlib.colors import rgb2hex
 from PyQt5.QtGui import QImage, QPixmap, QIntValidator
@@ -793,7 +794,7 @@ class MainWindow(QMainWindow):
         # Add cameras to menu.
         for id, name in self.cameras.items():
             action = QAction(
-                f" {id}: {name}", cameraMenu, triggered=self.camera_actions
+                f" {name}", cameraMenu, triggered=self.camera_actions
             )
             cameraMenu.addAction(action)
 
@@ -849,7 +850,7 @@ class MainWindow(QMainWindow):
                 not self.movie_thread.record and self.movie_thread.recorded_data
             ):  # If record is dissabled, save record.
                 file_name, _ = QFileDialog.getSaveFileName(
-                    self, "Save CSV and MP4 File", "readings"
+                    self, "Save CSV and MP4 File", "recording"
                 )
                 self.movie_thread.save_recording(file_name)
 
@@ -1115,7 +1116,7 @@ class MovieThread(QThread, Main_Detection):
         if not self.record and self.recorded_data:
             if file_name:
                 # Save recorded data.
-                np.savetxt(file_name + ".csv", self.recorded_data, delimiter=",")
+                np.savetxt(file_name + ".csv", self.recorded_data, delimiter=",", fmt='%1.3f')
 
                 # Save recorded video.
                 fourcc = cv2.VideoWriter_fourcc(*"MP4V")
@@ -1124,11 +1125,6 @@ class MovieThread(QThread, Main_Detection):
                 )
                 for frame in self.recorded_images:
                     video_out.write(frame)
-
-                # Save maximum of recorded data.
-                maxims = np.max(self.recorded_data, axis=0).reshape(1, -1)
-                path, name = file_name.rsplit("/", 1)
-                np.savetxt(path + "/max_" + name + ".csv", maxims, delimiter=",")
 
             self.recorded_data = list()
 
