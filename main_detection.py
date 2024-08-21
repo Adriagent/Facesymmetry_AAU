@@ -7,6 +7,7 @@ import numpy as np
 
 from matplotlib.pyplot import get_cmap
 from mediapipe.framework.formats import landmark_pb2
+from collections import deque
 
 from face_detection import Face_Detector
 from card_detection import Card_Detector
@@ -32,6 +33,13 @@ class Main_Detection:
         self.measures = []
         self.cmap = get_cmap("tab10")
         self.mask = None
+
+        # Parameters
+        self.window_size_median = 11  # Must be odd
+
+        # Initialize a deque to store the most recent data points
+        self.data_window_left = deque(maxlen=self.window_size_median)
+        self.data_window_right = deque(maxlen=self.window_size_median)
 
         self.card_length_mm = 85.60 # 85 mm 
 
@@ -252,7 +260,28 @@ class Main_Detection:
         
         return self.image
 
+    def do_filter_measurement(self):
+        
+        if len(self.measures) < 2:
+            return
+        
+        new_left_distance, new_right_distance = self.measures
 
+        # Append the new data points to the deque
+        self.data_window_left.append(new_left_distance)
+        self.data_window_right.append(new_right_distance)
+        
+        # Only filter if we have enough points
+        if len(self.data_window_left) == self.window_size_median:
+            filtered_left = np.median(self.data_window_left)
+            filtered_right = np.median(self.data_window_right)
+        else:
+            # Not enough data points yet; return the raw value or use a simple smoothing method
+            filtered_left = new_left_distance
+            filtered_right = new_right_distance
+
+        self.measures = filtered_left, filtered_right
+        
 if __name__ == "__main__":
 
     cap = cv2.VideoCapture(0, cv2.CAP_DSHOW)

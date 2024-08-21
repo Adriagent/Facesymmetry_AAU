@@ -129,7 +129,6 @@ class MainWindow(QMainWindow):
     saved_config_path = resource_path("./config/saved_config.json")
 
     background_img_path = resource_path("./media/background2.png")
-    # icon_img_path = resource_path("./media/icon2.png")
 
     def __init__(self):
         super().__init__()
@@ -609,6 +608,13 @@ class MainWindow(QMainWindow):
             triggered=self.settings_actions,
             checkable=True,
         )
+        self.settings_filter = QAction(
+            " Filter measurements",
+            settingsMenu,
+            triggered=self.settings_actions,
+            checkable=True,
+            checked=True,
+        )
 
         settingsMenu.addActions(
             [
@@ -624,6 +630,7 @@ class MainWindow(QMainWindow):
         )
         settingsMenu.addSeparator()
         settingsMenu.addAction(self.settings_blur)
+        settingsMenu.addAction(self.settings_filter)
         settingsMenu.addSeparator()
 
         self.defaultConfigMenu = settingsMenu.addMenu("      Default Outcome Measures")
@@ -755,6 +762,9 @@ class MainWindow(QMainWindow):
 
         elif button.text() == self.settings_blur.text():
             self.movie_thread.blur_background = not self.movie_thread.blur_background
+
+        elif button.text() == self.settings_filter.text():
+            self.movie_thread.filter_measurements = not self.movie_thread.filter_measurements
 
         elif button.text() == self.settings_plot.text():
             if not self.plot_window.isVisible():
@@ -999,6 +1009,7 @@ class MovieThread(QThread, Main_Detection):
         self.video = Video(source)
         self.new_frame = False
         self.timer_start = 0
+        self.filter_measurements = True
 
     def run(self):
         self.ThreadActive = True
@@ -1036,6 +1047,9 @@ class MovieThread(QThread, Main_Detection):
 
                 if self.mode == "Play":
                     self.measure_user_exercises()
+
+                    if self.filter_measurements:
+                        self.do_filter_measurement()
 
                     if self.blur_background:
                         self.draw_blurred_background()
