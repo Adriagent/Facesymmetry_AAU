@@ -1113,6 +1113,7 @@ class MovieThread(QThread, Main_Detection):
                     video_out.write(frame)
 
             self.recorded_data = list()
+            self.recorded_images = list()
             self.timer_start = 0
 
     def jumpt_to_frame(self, frame_index):
