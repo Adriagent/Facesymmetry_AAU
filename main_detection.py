@@ -89,8 +89,10 @@ class Main_Detection:
         return np.array([x,y])
 
     def measure_user_exercises(self):
-        if not self.face_detector.detection_result: return
-        if not len(self.face_detector.detection_result.face_landmarks): return
+        if not self.face_detector.detection_result: 
+            return
+        if not len(self.face_detector.detection_result.face_landmarks): 
+            return
 
         _, img_w = self.image.shape[:2]
         face_landmarks = self.face_detector.detection_result.face_landmarks[0]
@@ -130,15 +132,16 @@ class Main_Detection:
         
         for point_id, A_axis_id, B_axis_id in self.options:
 
-            if point_id == -1: continue
+            if point_id == -1: 
+                continue
 
             A_axis_px = self.normalized_to_pixel(landmarks[int(A_axis_id)])
             B_axis_px = self.normalized_to_pixel(landmarks[B_axis_id])
 
             P_px  = self.normalized_to_pixel(landmarks[point_id][:2]) # Mouth left edge.
             
-            I = self.point_line_intersect(P_px, A_axis_px, B_axis_px) # Intersection point between Line(A, B) and a perpenicular line containing P.
-            I_px = np.round(I).astype(int)
+            Inter = self.point_line_intersect(P_px, A_axis_px, B_axis_px) # Intersection point between Line(A, B) and a perpenicular line containing P.
+            I_px = np.round(Inter).astype(int)
 
             dist_px = np.linalg.norm(P_px - I_px)
 
@@ -152,7 +155,8 @@ class Main_Detection:
 
     def draw_measurements_on_image(self):
 
-        if not self.face_detector.detection_result: return self.image
+        if not self.face_detector.detection_result: 
+            return self.image
 
         face_landmarks_list = self.face_detector.detection_result.face_landmarks
 
@@ -199,8 +203,10 @@ class Main_Detection:
         return self.image
 
     def draw_face_mesh(self):
-        if not self.face_detector.detection_result: return self.image
-        if not len(self.face_detector.detection_result.face_landmarks): return self.image
+        if not self.face_detector.detection_result: 
+            return self.image
+        if not len(self.face_detector.detection_result.face_landmarks): 
+            return self.image
 
         face_landmarks = self.face_detector.detection_result.face_landmarks[0]
         landmarks = [np.array([landmark.x, landmark.y, landmark.z]) for landmark in face_landmarks]

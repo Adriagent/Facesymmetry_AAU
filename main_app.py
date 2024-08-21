@@ -5,8 +5,8 @@ import time
 import cv2
 import numpy as np
 import pyqtgraph as pg
-import matplotlib.pyplot as plt
 
+from matplotlib.pyplot import get_cmap
 from matplotlib.colors import rgb2hex
 from PyQt5.QtGui import QImage, QPixmap, QIntValidator
 from PyQt5.QtCore import pyqtSignal, QThread, Qt, QPoint
@@ -1145,7 +1145,7 @@ class PlotWindow(QWidget):
         self.layout.addWidget(self.plot_widget)
         self.setLayout(self.layout)
 
-        self.cmap = plt.get_cmap("tab10")
+        self.cmap = get_cmap("tab10")
 
         self.size_data = 400
         self.names = "Left", "Right"

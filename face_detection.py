@@ -1,5 +1,6 @@
 import mediapipe as mp
-import os, sys
+import os
+import sys
 
 def resource_path(relative_path):
     if hasattr(sys, '_MEIPASS'):
