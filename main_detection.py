@@ -280,7 +280,7 @@ class Main_Detection:
             filtered_left = new_left_distance
             filtered_right = new_right_distance
 
-        self.measures = filtered_left, filtered_right
+        self.measures = [filtered_left, filtered_right]
         
 if __name__ == "__main__":
 
