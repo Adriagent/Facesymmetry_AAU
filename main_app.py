@@ -13,6 +13,7 @@ from PyQt5.QtCore import pyqtSignal, QThread, Qt, QPoint
 from PyQt5.QtWidgets import (QMainWindow, QApplication, QWidget, QVBoxLayout, QHBoxLayout,
                             QSizePolicy, QSpacerItem, QMenu, QLabel, QAction, QWidgetAction,
                             QScrollArea, QPushButton, QLineEdit, QComboBox, QFileDialog, QMessageBox)
+from PyQt5 import QtWidgets
 from video_controller import Video
 from main_detection import Main_Detection
 
@@ -22,6 +23,92 @@ def resource_path(relative_path):
         return os.path.join(sys._MEIPASS, relative_path)
     return os.path.join(os.path.abspath("."), relative_path)
 
+
+from PyQt5.QtCore import pyqtSignal
+
+from PyQt5.QtCore import pyqtSignal, Qt
+from PyQt5.QtWidgets import QScrollArea, QLabel
+from PyQt5.QtGui import QPixmap
+
+class ImageView(QScrollArea):
+    clicked = pyqtSignal(object)
+    moved   = pyqtSignal(object)
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setWidgetResizable(True)
+
+        # --- enable mouse tracking everywhere ---
+        self.setMouseTracking(True)
+        self.viewport().setMouseTracking(True)
+
+        self._label = QLabel()
+        self._label.setAlignment(Qt.AlignCenter)
+        self._label.setFocusPolicy(Qt.NoFocus)
+        self._label.setMouseTracking(True)
+        self.setWidget(self._label)
+        # -----------------------------------------
+
+        # prevent focus stealing
+        self.setFocusPolicy(Qt.NoFocus)
+
+        self._pixmap = QPixmap()
+        self._scale  = 1.0
+
+    def setPixmap(self, pix: QPixmap):
+        self._pixmap = pix
+        self._scale  = 1.0
+        self._update()
+
+    def updatePixmap(self, pix: QPixmap):
+        self._pixmap = pix
+        self._update()
+
+    def _update(self):
+        if self._pixmap.isNull(): return
+        s = self._pixmap.size() * self._scale
+        scaled = self._pixmap.scaled(s, Qt.KeepAspectRatio, Qt.SmoothTransformation)
+        self._label.setPixmap(scaled)
+        self._label.resize(scaled.size())
+
+    def wheelEvent(self, ev):
+        if ev.modifiers() & Qt.ControlModifier:
+            old = self._scale
+            fac = 1.25 if ev.angleDelta().y() > 0 else 0.8
+            new = max(1.0, old * fac)
+            fac = new / old
+
+            # keep cursor-point fixed
+            c = ev.pos()
+            h = self.horizontalScrollBar().value()
+            v = self.verticalScrollBar().value()
+            px, py = h + c.x(), v + c.y()
+
+            self._scale = new
+            self._update()
+
+            self.horizontalScrollBar().setValue(int(px * fac - c.x()))
+            self.verticalScrollBar().setValue(int(py * fac - c.y()))
+            ev.accept()
+        else:
+            super().wheelEvent(ev)
+
+    def mousePressEvent(self, ev):
+        self.clicked.emit(ev)
+        super().mousePressEvent(ev)
+
+    def mouseMoveEvent(self, ev):
+        self.moved.emit(ev)
+        super().mouseMoveEvent(ev)
+
+    def pixmap(self):
+            """Return the currently‐displayed (scaled) QPixmap."""
+            return self._label.pixmap()
+
+    def sizeHint(self):
+        if not self._pixmap.isNull():
+            return self._pixmap.size()
+        return super().sizeHint()
 
 class MainWindow(QMainWindow):
     options_signal = pyqtSignal(np.ndarray)
@@ -152,28 +239,23 @@ class MainWindow(QMainWindow):
 
         self.plot_recorded_data.mouseClicked.connect(self.movie_thread.jumpt_to_frame)
 
-        # Layoutsl
+        # Layouts
         vlayout = QVBoxLayout()
         menu_layout = QHBoxLayout()
-
         main_layout = QHBoxLayout()
         right_layout = QVBoxLayout()
 
-        # Establecer márgenes a cero para eliminar la separación
         menu_layout.setAlignment(Qt.AlignLeft)
-
         menu_layout.setContentsMargins(0, 0, 0, 0)
         vlayout.setContentsMargins(0, 5, 0, 5)
         menu_layout.setSpacing(0)
 
-        # Setup menubar.
+        # Setup menubar
         self.setup_menubar(menu_layout)
 
-        # Setup main content.
+        # Setup main content
         self.backg_img = QImage(self.background_img_path)
-        self.movie_thread.ImageUpdate.connect(
-            self.update_movie
-        )  # If a signal with a frame is received, update image.
+        self.movie_thread.ImageUpdate.connect(self.update_movie)
         self.movie_thread.finished.connect(self.stopped_video)
         self.movie_thread.PauseUpdate.connect(
             lambda: self.toggle_pause(self.pauseLabel, True)
@@ -181,27 +263,36 @@ class MainWindow(QMainWindow):
         self.options_signal.connect(self.movie_thread.receive_options)
         self.options_signal.connect(self.plot_window.set_lines)
 
-        self.image = QLabel(self)
-        scaled_img = self.backg_img.scaled(
-            int(self.backg_img.width() * 0.55),
-            int(self.backg_img.height() * 0.55),
-            Qt.KeepAspectRatio,
-            Qt.SmoothTransformation,
+        # Replace QLabel with our zoomable ImageView
+        self.image = ImageView(self)
+
+        # fit‐to‐window background initially
+        bg = QPixmap(self.backg_img).scaled(
+            int(self.backg_img.width() * 0.7),
+            int(self.backg_img.height() * 0.7),
+            Qt.KeepAspectRatio, Qt.SmoothTransformation
         )
-        self.image.setPixmap(QPixmap(scaled_img))
-        self.image.resizeEvent = self.resize_image
+        self.image.setPixmap(bg)
+
+        # size hints
         self.image.setBaseSize(
-            int(self.backg_img.width() * 0.2), int(self.backg_img.height() * 0.2)
+            int(self.backg_img.width() * 0.2),
+            int(self.backg_img.height() * 0.2)
         )
         self.image.setMinimumSize(
-            int(self.backg_img.width() * 0.1), int(self.backg_img.height() * 0.1)
+            int(self.backg_img.width() * 0.1),
+            int(self.backg_img.height() * 0.1)
         )
         self.image.setMouseTracking(True)
-        self.image.mouseMoveEvent = self.image_mouse_moved_event
-        self.image.mousePressEvent = self.image_clicked_event
+
+        # wire your existing handlers to the new signals
+        self.image.clicked.connect(self.image_clicked_event)
+        self.image.moved.connect(self.image_mouse_moved_event)
+
         main_layout.addWidget(self.image)
         main_layout.setStretchFactor(self.image, 1)
 
+        # Right‐hand scroll/options panel
         self.scroll = QScrollArea()
         self.setup_scroll()
         self.scroll.setSizePolicy(QSizePolicy(QSizePolicy.Fixed, QSizePolicy.Expanding))
@@ -211,8 +302,8 @@ class MainWindow(QMainWindow):
         btn = QPushButton("Add")
         btn.pressed.connect(self.add_scroll_option)
         btn.setSizePolicy(QSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed))
-
         buttons_layout.addWidget(btn)
+
         btn = QPushButton("Remove")
         btn.pressed.connect(self.remove_scroll_option)
         btn.setSizePolicy(QSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed))
@@ -224,6 +315,7 @@ class MainWindow(QMainWindow):
         btn = QPushButton("Save")
         btn.setSizePolicy(QSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed))
         buttons_layout.addWidget(btn)
+
         textbox = QLineEdit(self, placeholderText=" Name of saved config...")
         textbox.setContentsMargins(0, 0, 20, 0)
         buttons_layout.addWidget(textbox)
@@ -244,67 +336,92 @@ class MainWindow(QMainWindow):
 
         self.setStyleSheet(self.style)
 
+        # this makes the QMainWindow wrap to all of its widgets' sizeHints
+        self.adjustSize()
+
     def resize_image(self, event):
         if not self.movie_thread.ThreadActive:
             self.set_background_img()
 
-        # Call the base class resizeEvent
-        QLabel.resizeEvent(self.image, event)
+        # call the original (bound) resizeEvent on the QLabel instance:
+        super(type(self.image), self.image).resizeEvent(event)
 
     def image_clicked_event(self, event):
+        # only when video is running
         if not self.movie_thread.isRunning():
             return
 
+        # 1) grab the currently‐displayed (scaled) pixmap
+        pix = self.image.pixmap()
+        if pix is None:
+            return
+        disp_w, disp_h = pix.width(), pix.height()
+
+        # 2) map the click into the QLabel’s coordinate system
+        #    (event.pos is relative to the ScrollArea; viewport() is where the label lives)
+        global_pt = self.image.viewport().mapToGlobal(event.pos())
+        label = self.image.widget()   # that is your internal QLabel
+        local_pt = label.mapFromGlobal(global_pt)
+
+        # 3) subtract the centering offset to get pixmap‐local coords
+        off_x = (label.width()  - disp_w) / 2
+        off_y = (label.height() - disp_h) / 2
+        x = local_pt.x() - off_x
+        y = local_pt.y() - off_y
+
+        # 4) ignore clicks outside the image
+        if x < 0 or x > disp_w or y < 0 or y > disp_h:
+            return
+
+        # 5) scale back up to the ORIGINAL frame size
+        orig_h, orig_w = self.movie_thread.image.shape[:2]
+        real_x = round(x / disp_w * orig_w)
+        real_y = round(y / disp_h * orig_h)
+
+        # now do exactly what you did before with (real_x, real_y):
         if self.label_to_modify and self.movie_thread.landmark_id:
-            id = str(self.movie_thread.landmark_id)
-            self.label_to_modify.setText(id)
-
+            self.label_to_modify.setText(str(self.movie_thread.landmark_id))
         elif self.settings_scale_manual.isChecked():
-            x = event.pos().x()
-            y = event.pos().y()
-
-            img_H = self.image.pixmap().height()
-            img_W = self.image.pixmap().width()
-            shape = (img_H, img_W)
-
-            offset_y = (self.image.height() - img_H) / 2
-            y = int(y - offset_y)
-
-            h, w = shape
-            height, width = self.movie_thread.image.shape[:2]
-
-            new_x = round(x / w * width)
-            new_y = round(y / h * height)
-
-            point = np.array([new_x, new_y])
-
+            p = np.array([real_x, real_y])
+            # … rest of your card‐point logic …
             if len(self.card_points) > 1:
                 self.card_points = []
-
-            self.card_points.append(point)
-
+            self.card_points.append(p)
             if len(self.card_points) > 1:
                 p1, p2 = self.card_points
-                card_length_px = np.linalg.norm(p1 - p2)  # card side length in pixels.
-
+                px_len = np.linalg.norm(p1 - p2)
                 self.movie_thread.pixel_to_mm_factor = (
-                    self.movie_thread.card_length_mm / card_length_px
+                    self.movie_thread.card_length_mm / px_len
                 )
                 self.movie_thread.V_DIST_PX_old = self.movie_thread.V_DIST_PX
 
     def image_mouse_moved_event(self, event):
-        if self.movie_thread.isRunning():
-            x = event.pos().x()
-            y = event.pos().y()
+        # only when video is running
+        if not self.movie_thread.isRunning():
+            return
 
-            img_H = self.image.pixmap().height()
-            img_W = self.image.pixmap().width()
+        # same mapping logic as above
+        pix = self.image.pixmap()
+        if pix is None:
+            return
+        disp_w, disp_h = pix.width(), pix.height()
 
-            offset_y = (self.image.height() - img_H) / 2
-            y = int(y - offset_y)
-            selected = (x, y)
+        global_pt = self.image.viewport().mapToGlobal(event.pos())
+        label = self.image.widget()
+        local_pt = label.mapFromGlobal(global_pt)
 
-            self.movie_thread.get_mouse_pos(selected, (img_H, img_W))
+        off_x = (label.width()  - disp_w) / 2
+        off_y = (label.height() - disp_h) / 2
+        x = local_pt.x() - off_x
+        y = local_pt.y() - off_y
+
+        # if outside, skip
+        if x < 0 or x > disp_w or y < 0 or y > disp_h:
+            return
+
+        # pass the display‐local coords and the display size—
+        # your MovieThread will do the scaling back internally
+        self.movie_thread.get_mouse_pos((x, y), (disp_h, disp_w))
 
     def update_movie(self, cv2_img):
         if self.show_fps:
@@ -328,27 +445,33 @@ class MainWindow(QMainWindow):
         image = QImage(
             cv2_img.data, cv2_img.shape[1], cv2_img.shape[0], QImage.Format_RGB888
         ).rgbSwapped()
-        self.image.setPixmap(
-            QPixmap(image).scaled(
-                self.image.width(),
-                self.image.height(),
-                Qt.KeepAspectRatio,
-                Qt.SmoothTransformation,
-            )
-        )
+        # self.image.setPixmap(
+        #     QPixmap(image).scaled(
+        #         self.image.width(),
+        #         self.image.height(),
+        #         Qt.KeepAspectRatio,
+        #         Qt.SmoothTransformation,
+        #     )
+        # )
+        # preserve zoom level between frames
+        pix = QPixmap.fromImage(image)
+        self.image.updatePixmap(pix)
 
         if self.plot_window.isVisible() and self.movie_thread.mode == "Play":
             self.plot_window.update_plot(self.movie_thread.measures)
 
     def set_background_img(self):
-        img = QPixmap(self.backg_img)
-        scaled_img = img.scaled(
-            self.image.width(),
-            self.image.height(),
-            Qt.KeepAspectRatio,
-            Qt.SmoothTransformation,
-        )
-        self.image.setPixmap(scaled_img)
+        # img = QPixmap(self.backg_img)
+        # scaled_img = img.scaled(
+        #     self.image.width(),
+        #     self.image.height(),
+        #     Qt.KeepAspectRatio,
+        #     Qt.SmoothTransformation,
+        # )
+        # self.image.setPixmap(scaled_img)
+        # with zoomable view
+        orig = QPixmap(self.backg_img)
+        self.image.setPixmap(orig)
 
     def print_fps(self, img):
         elapsed_time = time.time() - self.prev_time
